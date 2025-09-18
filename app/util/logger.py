@@ -7,7 +7,7 @@ from datetime import datetime
 from app.model.alert import Alert
 from app.core.config import settings
 
-# 메모리 캐시
+# 메모리 캐시 (임시로 만듦듦)
 alert_cache: List[Alert] = []
 MAX_CACHE_SIZE = 1000
 
@@ -76,7 +76,7 @@ async def monitor_logs():
         
         while True:
             try:
-                # WSL을 통해 파일의 총 라인 수 확인
+                # WSL을 통해 파일의 총 라인 수 확인(로그용)
                 result = subprocess.run(
                     ["wsl", "wc", "-l", wsl_log_path],
                     capture_output=True,
@@ -90,7 +90,7 @@ async def monitor_logs():
                     if current_lines > last_lines_count:
                         print(f"새로운 로그 라인 감지: {last_lines_count} -> {current_lines}")
                         
-                        # 새로운 라인들만 가져오기
+                        # 새로운 라인들만 가져오기(로그용)
                         new_lines = current_lines - last_lines_count
                         result = subprocess.run(
                             ["wsl", "tail", "-n", str(new_lines), wsl_log_path],
@@ -125,7 +125,6 @@ async def monitor_logs():
                                     except json.JSONDecodeError:
                                         pass
                             
-                            # alert가 없으면 간단히 표시
                             if not alert_found:
                                 print(f"  → {new_lines}개 로그 처리 완료 (alert 없음)")
                         
