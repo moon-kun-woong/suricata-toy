@@ -1,0 +1,22 @@
+# /suricata/suricata.yaml 주요 설정
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      types:
+        - alert:
+            payload: yes
+            payload-buffer-size: 4kb
+            payload-printable: yes
+            packet: yes
+        - http:
+            extended: yes
+        - dns:
+            enabled: yes
+        - tls:
+            extended: yes
+        - files:
+            force-magic: no
+        - drop:
+            enabled: yes
