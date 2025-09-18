@@ -36,7 +36,7 @@ class SuricataManager:
         """Suricata 시작 (WSL에서)"""
         try:
             subprocess.run(
-                ["wsl", "sudo", "suricata", "-c", "/etc/suricata/suricata.yaml", "-i", "any", "-D"],
+                ["wsl", "sudo", "suricata", "-c", "/etc/suricata/suricata.yaml", "-i", "eth0", "-D"],
                 check=True
             )
             return True

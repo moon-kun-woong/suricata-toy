@@ -7,22 +7,20 @@ from datetime import datetime
 from app.model.alert import Alert
 from app.core.config import settings
 
-# 메모리 캐시 (최소한 구현)
+# 메모리 캐시
 alert_cache: List[Alert] = []
 MAX_CACHE_SIZE = 1000
 
 async def parse_eve_log_line(line: str) -> Optional[Alert]:
     """EVE JSON 로그 라인 파싱"""
     try:
-        # 빈 줄이나 공백만 있는 줄 제거
         line = line.strip()
         if not line:
             return None
             
-        # JSON 파싱 시도
         data = json.loads(line)
         
-        # alert 이벤트만 처리
+        # alert 이벤트만
         if data.get("event_type") == "alert":
             alert = Alert(
                 timestamp=datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00")),
@@ -39,10 +37,8 @@ async def parse_eve_log_line(line: str) -> Optional[Alert]:
             return alert
             
     except json.JSONDecodeError:
-        # JSON 파싱 오류는 패스스
         pass
     except Exception as e:
-        # 다른 오류만 출력
         print(f"예상치 못한 파싱 오류: {e}")
     
     return None
@@ -76,7 +72,6 @@ async def monitor_logs():
             print(f"WSL 연결 오류: {e}")
             return
         
-        # 마지막으로 읽은 위치 추적
         last_lines_count = 0
         
         while True:
@@ -128,7 +123,7 @@ async def monitor_logs():
                                                 if len(alert_cache) > MAX_CACHE_SIZE:
                                                     alert_cache.pop(0)
                                     except json.JSONDecodeError:
-                                        pass  # JSON이 아닌 라인 무시
+                                        pass
                             
                             # alert가 없으면 간단히 표시
                             if not alert_found:
@@ -136,8 +131,8 @@ async def monitor_logs():
                         
                         last_lines_count = current_lines
                 
-                # 5초마다 체크
-                await asyncio.sleep(5)
+                # 3초마다 체크
+                await asyncio.sleep(3)
                 
             except subprocess.TimeoutExpired:
                 print("WSL 명령어 타임아웃, 재시도...")
