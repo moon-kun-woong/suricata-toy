@@ -1,1 +1,17 @@
 /.env
+.claude
+*.pyc
+__pycache__/
+
+# uvicorn
+.venv
+
+# suricata
+suricata
+
+# logs
+logs
+
+CLICKHOUSE_SETUP.md
+*__pycache__
+resource/

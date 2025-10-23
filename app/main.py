@@ -12,13 +12,31 @@ from app.model.suricata_status import SuricataStatus
 from app.model.rule_update import RuleUpdate
 from app.service.suricata_manager import SuricataManager
 from app.util.logger import monitor_logs, alert_cache
+from app.util.clickhouse_client import clickhouse_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("=" * 50)
+    if clickhouse_client.connect():
+        clickhouse_client.ensure_database()
+    else:
+        print("⚠ ClickHouse 연결 실패 - 로컬 캐시만 사용됩니다")
+    
+    # 백그라운드 태스크 시작
     monitor_task = asyncio.create_task(monitor_logs())
+    flush_task = asyncio.create_task(clickhouse_client.periodic_flush())
+    print("=" * 50)
+    
     yield
+    
+    print("\n애플리케이션 종료.")
     monitor_task.cancel()
+    flush_task.cancel()
+    
+    await clickhouse_client.flush_batch()
+    clickhouse_client.disconnect()
+    print("ClickHouse 연결 종료 완료")
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
@@ -101,4 +119,4 @@ async def add_rule(rule: RuleUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

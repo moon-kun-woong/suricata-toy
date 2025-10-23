@@ -6,8 +6,9 @@ from datetime import datetime
 
 from app.model.alert import Alert
 from app.core.config import settings
+from app.util.clickhouse_client import clickhouse_client
 
-# 메모리 캐시 (임시로 만듦듦)
+# 메모리 캐시 (임시로 만듦듦) - API 응답용
 alert_cache: List[Alert] = []
 MAX_CACHE_SIZE = 1000
 
@@ -44,17 +45,15 @@ async def parse_eve_log_line(line: str) -> Optional[Alert]:
     return None
 
 async def monitor_logs():
-    """WSL 파일 모니터링"""
+    """WSL 파일 모니터링 및 ClickHouse 저장"""
     global alert_cache
     
     # WSL 경로를 직접 문자열로 사용
     wsl_log_path = "/var/log/suricata/eve.json"
     print(f"로그 모니터링 시작: {wsl_log_path}")
+    print(f"ClickHouse 활성화")
     
     try:
-        print("WSL 파일 모니터링 시작")
-        
-        # WSL 파일 직접 접근 테스트 (문자열 경로 사용)
         try:
             result = subprocess.run(
                 ["wsl", "head", "-1", wsl_log_path],
@@ -63,8 +62,7 @@ async def monitor_logs():
                 timeout=10
             )
             if result.returncode == 0:
-                print("WSL 파일 접근 성공")
-                print(f"첫 번째 라인: {result.stdout[:100]}...")
+                pass
             else:
                 print(f"WSL 파일 접근 실패: {result.stderr}")
                 return
@@ -76,7 +74,7 @@ async def monitor_logs():
         
         while True:
             try:
-                # WSL을 통해 파일의 총 라인 수 확인(로그용)
+                # WSL을 통해 파일의 총 라인 수 확인
                 result = subprocess.run(
                     ["wsl", "wc", "-l", wsl_log_path],
                     capture_output=True,
@@ -90,7 +88,6 @@ async def monitor_logs():
                     if current_lines > last_lines_count:
                         print(f"새로운 로그 라인 감지: {last_lines_count} -> {current_lines}")
                         
-                        # 새로운 라인들만 가져오기(로그용)
                         new_lines = current_lines - last_lines_count
                         result = subprocess.run(
                             ["wsl", "tail", "-n", str(new_lines), wsl_log_path],
@@ -102,31 +99,36 @@ async def monitor_logs():
                         if result.returncode == 0 and result.stdout.strip():
                             lines = result.stdout.strip().split('\n')
                             
-                            alert_found = False
+                            alert_count = 0
+                            total_events = 0
+                            
                             for line in lines:
                                 line = line.strip()
                                 if line:
-                                    # alert 이벤트만 처리하고 출력
                                     try:
                                         data = json.loads(line)
                                         event_type = data.get("event_type", "unknown")
+                                        total_events += 1
                                         
+                                        # ClickHouse에 모든 이벤트 저장
+                                        await clickhouse_client.add_to_batch(data)
+                                        
+                                        # alert 이벤트는 메모리 캐시에도 저장 (API 응답용)
                                         if event_type == "alert":
-                                            alert_found = True
+                                            alert_count += 1
                                             alert = await parse_eve_log_line(line)
                                             if alert:
                                                 alert_cache.append(alert)
-                                                print(f"새 알림 발견: {alert.alert_signature} (심각도: {alert.alert_severity})")
-                                                print(f"   - 출발지: {alert.src_ip}:{alert.src_port}")
-                                                print(f"   - 목적지: {alert.dest_ip}:{alert.dest_port}")
-                                                print(f"   - 현재 캐시: {len(alert_cache)}개")
+                                                print(f"  → Alert: {alert.alert_signature} (심각도: {alert.alert_severity})")
+                                                print(f"     출발지: {alert.src_ip}:{alert.src_port} → 목적지: {alert.dest_ip}:{alert.dest_port}")
                                                 if len(alert_cache) > MAX_CACHE_SIZE:
                                                     alert_cache.pop(0)
+                                    
                                     except json.JSONDecodeError:
                                         pass
                             
-                            if not alert_found:
-                                print(f"  → {new_lines}개 로그 처리 완료 (alert 없음)")
+                            if total_events > 0:
+                                print(f" {total_events}개 이벤트 처리 완료 (Alert: {alert_count}개)")
                         
                         last_lines_count = current_lines
                 
@@ -134,12 +136,11 @@ async def monitor_logs():
                 await asyncio.sleep(3)
                 
             except subprocess.TimeoutExpired:
-                print("WSL 명령어 타임아웃, 재시도...")
+                print("WSL 명령어 타임아웃...")
                 await asyncio.sleep(10)
             except Exception as e:
-                print(f"로그 체크 오류: {e}")
+                print(f"log monitor error: {e}")
                 await asyncio.sleep(10)
                 
     except Exception as e:
-        print(f"로그 모니터링 치명적 오류: {e}")
-        print("WSL 연결 문제일 가능성 높음")
+        print(f"log monitor error: {e}")
